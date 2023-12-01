@@ -21,6 +21,10 @@ int Player::getRanking() const {
     return ranking;
 }
 
+std::string Player::getName() const {
+    return name;
+}
+
 
 
 

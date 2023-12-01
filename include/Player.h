@@ -30,6 +30,8 @@ public:
      */
     int getRanking() const;
 
+    std::string getName() const;
+
     friend std::ostream& operator <<(std::ostream& os, const Player& player) {
         os << player.ranking << ". " << player.name << std::endl;
         return os;
