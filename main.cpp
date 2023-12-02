@@ -2,8 +2,10 @@
 #include "include/Ladder.h"
 
 
+
 int main() {
-    Ladder squashLadder = Ladder();
+    std::string dbName = "squash_ladder.db";
+    Ladder squashLadder = Ladder(dbName);
     squashLadder.addPlayer("Eli");
     squashLadder.addPlayer("Peter");
     squashLadder.addPlayer("Yoyo");
@@ -23,9 +25,14 @@ int main() {
     squashLadder.recordMatch(match3);
     squashLadder.recordMatch(match4);
 
+    squashLadder.saveMatchToDatabase(match1);
 
     squashLadder.printMatches();
     std::cout << squashLadder << std::endl;
 
     return 0;
 }
+
+// TODO get sqlite running. table for ladder, table for match history
+// might need a remove player. the recordMatch function queries for the the most recent
+// ladder in the db. updates it if needed. adds match to db of matches

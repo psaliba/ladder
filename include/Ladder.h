@@ -3,6 +3,7 @@
 //
 #include <vector>
 #include <string>
+#include <sqlite3.h>
 #include "Player.h"
 #include "Match.h"
 
@@ -15,8 +16,27 @@ class Ladder {
 private:
     std::vector<Player> ladder; // sorted vector containing players to represent the ladder
     std::vector<Match> matchHistory; // a vector containing all match history.
+    sqlite3* db;
+
 public:
-    Ladder();
+    Ladder(std::string& dbPath);
+
+    /**
+     * Executes the passed sql statement on the db
+     * @param sql
+     */
+    void executeSQL(const char* sql);
+
+    /**
+     * Make the db tables if they do not exist already
+     */
+    void createTables();
+
+    /**
+     * Inserts the passed match into the db
+     * @param match the match to save
+     */
+    void saveMatchToDatabase(Match &match);
 
     /**
      * Adds a player to the ladder, at the back of the ladder

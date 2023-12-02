@@ -22,6 +22,7 @@ public:
 
     std::string getWinnerName() const;
     std::string getLooserName() const;
+    std::string getStringDate() const;
 
     friend std::ostream& operator <<(std::ostream& os, const Match& match) {
         os << "Match: " << match.winner << " beat " << match.looser << " " << match.winnerGameScore << "-" << match.looserGameScore << std::endl;

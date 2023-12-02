@@ -5,6 +5,8 @@
 #include "../include/Match.h"
 #include <string>
 #include <utility>
+#include <iomanip>
+#include <sstream>
 
 Match::Match(std::string winnerName, int winningGames, std::string looserName, int loosingGames, std::tm dateOfMatch) {
     winner = std::move(winnerName);
@@ -20,4 +22,10 @@ std::string Match::getWinnerName() const {
 
 std::string Match::getLooserName() const {
     return looser;
+}
+
+std::string Match::getStringDate() const {
+    std::stringstream ss;
+    ss << std::put_time(&datePlayed, "%Y-%m-%d %H:%M:%S");
+    return ss.str();
 }
