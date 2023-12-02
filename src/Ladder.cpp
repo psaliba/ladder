@@ -5,7 +5,7 @@
 #include "../include/Ladder.h"
 #include <sqlite3.h>
 #include <iostream>
-
+#include <fstream>
 
 
 Ladder::Ladder(std::string &dbPath) {
@@ -17,12 +17,28 @@ Ladder::Ladder(std::string &dbPath) {
         exit(1);
     }
     std::cout << "Opened the db successfully" << std::endl;
-    // TODO load ladder/matches from DB
     // TODO each time we update the ladder, need to also update the db
 
     createTables();
     loadLadder();
 
+    // set up slack connection.
+    // expects a file called secret.txt containing the following (in order, each token on a new line)
+    // slack app id
+    // slack client id
+    // slack bot user oAuth token
+    // the name of the channel to post to
+
+    std::ifstream infile("secret.txt");
+    std::getline(infile, slackAppID);
+    std::getline(infile, slackClientID);
+    std::getline(infile, slackClientSecret);
+    std::getline(infile, slackChannelName);
+
+    auto& slack = slack::create(slackClientSecret);
+    slack.chat.channel = slackChannelName;
+
+    slack.chat.postMessage("this is a test");
 }
 
 void Ladder::executeSQL(const char *sql) {
@@ -89,10 +105,7 @@ void Ladder::addPlayer(const std::string &name) {
 }
 
 void Ladder::updateLadder() {
-    std::cout << "in update ladder" << std::endl;
     for (const Player& player : ladder) {
-        std::cout << "updating " << player << std::endl;
-
         std::string updateSQL = "UPDATE ladder SET ranking = " + std::to_string(player.getRanking()) + " WHERE name = '" + player.getName() + "';";
         executeSQL(updateSQL.c_str());
     }
@@ -123,7 +136,7 @@ void Ladder::recordMatch(Match matchPlayed) {
     std::sort(ladder.begin(), ladder.end(), [](const Player& a, const Player& b) {
         return a.getRanking() < b.getRanking();
     });
-    updateLadder();
+    updateLadder(); // not the most efficient to do it here, but makes sure the this.ladder matches the db
 }
 
 void Ladder::printMatches() {

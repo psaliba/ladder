@@ -6,6 +6,7 @@
 #include <sqlite3.h>
 #include "Player.h"
 #include "Match.h"
+#include "slacking.hpp"
 
 #ifndef LADDER_LADDER_H
 #define LADDER_LADDER_H
@@ -17,6 +18,10 @@ private:
     std::vector<Player> ladder; // sorted vector containing players to represent the ladder
     std::vector<Match> matchHistory; // a vector containing all match history.
     sqlite3* db{};
+    std::string slackAppID;
+    std::string slackClientID;
+    std::string slackClientSecret;
+    std::string slackChannelName;
 
 public:
     Ladder(std::string& dbPath);

@@ -6,11 +6,11 @@
 int main() {
     std::string dbName = "squash_ladder.db";
     Ladder squashLadder = Ladder(dbName);
-    squashLadder.addPlayer("Eli");
-    squashLadder.addPlayer("Peter");
-    squashLadder.addPlayer("Yoyo");
-    squashLadder.addPlayer("Sam");
-    squashLadder.updateLadder();
+//    squashLadder.addPlayer("Eli");
+//    squashLadder.addPlayer("Peter");
+//    squashLadder.addPlayer("Yoyo");
+//    squashLadder.addPlayer("Sam");
+//    squashLadder.updateLadder();
 
     std::cout << squashLadder << std::endl;
 

@@ -10,7 +10,9 @@ add_executable(ladder main.cpp
         include/Match.h
         src/Match.cpp
         include/Ladder.h
-        src/Ladder.cpp)
+        src/Ladder.cpp
+        include/slacking.hpp
+        include/json.hpp)
 
-target_link_libraries(ladder SQLite::SQLite3)
+target_link_libraries(ladder SQLite::SQLite3 curl )
 
