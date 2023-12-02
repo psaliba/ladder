@@ -16,7 +16,7 @@ class Ladder {
 private:
     std::vector<Player> ladder; // sorted vector containing players to represent the ladder
     std::vector<Match> matchHistory; // a vector containing all match history.
-    sqlite3* db;
+    sqlite3* db{};
 
 public:
     Ladder(std::string& dbPath);
@@ -37,6 +37,16 @@ public:
      * @param match the match to save
      */
     void saveMatchToDatabase(Match &match);
+
+    /**
+     * Updates the entire ladder in the database. Sets all players in the db to have their ranking as defined by this.ladder
+     */
+    void updateLadder();
+
+    /**
+     * Load the ladder from the attached database, replacing any data that exists in the ladder vector
+     */
+    void loadLadder();
 
     /**
      * Adds a player to the ladder, at the back of the ladder

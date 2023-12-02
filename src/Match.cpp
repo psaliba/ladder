@@ -29,3 +29,7 @@ std::string Match::getStringDate() const {
     ss << std::put_time(&datePlayed, "%Y-%m-%d %H:%M:%S");
     return ss.str();
 }
+
+std::string Match::getStringScore() const {
+    return "" + std::to_string(winnerGameScore) + "-" + std::to_string(looserGameScore);
+}

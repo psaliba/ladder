@@ -10,6 +10,7 @@ int main() {
     squashLadder.addPlayer("Peter");
     squashLadder.addPlayer("Yoyo");
     squashLadder.addPlayer("Sam");
+    squashLadder.updateLadder();
 
     std::cout << squashLadder << std::endl;
 
@@ -25,14 +26,7 @@ int main() {
     squashLadder.recordMatch(match3);
     squashLadder.recordMatch(match4);
 
-    squashLadder.saveMatchToDatabase(match1);
-
-    squashLadder.printMatches();
     std::cout << squashLadder << std::endl;
 
     return 0;
 }
-
-// TODO get sqlite running. table for ladder, table for match history
-// might need a remove player. the recordMatch function queries for the the most recent
-// ladder in the db. updates it if needed. adds match to db of matches

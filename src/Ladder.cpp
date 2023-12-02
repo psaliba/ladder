@@ -18,9 +18,11 @@ Ladder::Ladder(std::string &dbPath) {
     }
     std::cout << "Opened the db successfully" << std::endl;
     // TODO load ladder/matches from DB
-    // TODO each time we update the ladder, need to also update the db 
+    // TODO each time we update the ladder, need to also update the db
 
     createTables();
+    loadLadder();
+
 }
 
 void Ladder::executeSQL(const char *sql) {
@@ -44,23 +46,61 @@ void Ladder::createTables() {
                                              "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                                              "winner TEXT NOT NULL,"
                                              "loser TEXT NOT NULL,"
-                                             "date TEXT NOT NULL);";
+                                             "date TEXT NOT NULL,"
+                                             "score TEXT NOT NULL);";
 
     executeSQL(createLadderTableSQL);
     executeSQL(createMatchHistoryTableSQL);
 }
 
+void Ladder::loadLadder() {
+    const char* ladderQuery =  "SELECT * FROM ladder ORDER BY ranking;";
+    sqlite3_stmt* stmt;
+
+    int rc = sqlite3_prepare_v2(db, ladderQuery, -1, &stmt, nullptr);
+
+    if (rc == 0) {
+        // Clear existing ladder data
+        ladder.clear();
+
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            int ranking = sqlite3_column_int(stmt, 2);
+            ladder.emplace_back(name, ranking);
+        }
+
+        sqlite3_finalize(stmt);
+    } else {
+        std::cerr << "Failed to execute query: " << sqlite3_errmsg(db) << std::endl;
+        exit(1);
+    }
+}
+
+
 void Ladder::saveMatchToDatabase(Match &match) {
-    std::string insertMatchSQL = "INSERT INTO match_history (winner, loser, date) VALUES ('" + match.getWinnerName() + "', '" + match.getLooserName() + "', '" + match.getStringDate() + "');";
+    std::string insertMatchSQL = "INSERT INTO match_history (winner, loser, date, score) VALUES ('" + match.getWinnerName() + "', '" + match.getLooserName() + "', '" + match.getStringDate() + + "', '" + match.getStringScore() + "');";
     executeSQL(insertMatchSQL.c_str());
 }
 
 void Ladder::addPlayer(const std::string &name) {
     ladder.emplace_back(name, ladder.size() + 1);
+    std::string insertMatchSQL = "INSERT INTO ladder (name, ranking) VALUES ('" + name + "', '" + std::to_string(ladder.size()+1) + "');";
+    executeSQL(insertMatchSQL.c_str());
+}
+
+void Ladder::updateLadder() {
+    std::cout << "in update ladder" << std::endl;
+    for (const Player& player : ladder) {
+        std::cout << "updating " << player << std::endl;
+
+        std::string updateSQL = "UPDATE ladder SET ranking = " + std::to_string(player.getRanking()) + " WHERE name = '" + player.getName() + "';";
+        executeSQL(updateSQL.c_str());
+    }
 }
 
 void Ladder::recordMatch(Match matchPlayed) {
     matchHistory.emplace_back(matchPlayed);
+    saveMatchToDatabase(matchPlayed);
 
     auto winnerIt = std::find_if(ladder.begin(), ladder.end(),
                                  [&matchPlayed](const Player& player) {
@@ -83,7 +123,7 @@ void Ladder::recordMatch(Match matchPlayed) {
     std::sort(ladder.begin(), ladder.end(), [](const Player& a, const Player& b) {
         return a.getRanking() < b.getRanking();
     });
-
+    updateLadder();
 }
 
 void Ladder::printMatches() {
