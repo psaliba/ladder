@@ -24,12 +24,14 @@ Ladder::Ladder(std::string &dbPath) {
 
     // set up slack connection.
     // expects a file called secret.txt containing the following (in order, each token on a new line)
+    // slack xapp-1 token for socket connection
     // slack app id
     // slack client id
     // slack bot user oAuth token
     // the name of the channel to post to
-
+    std::string doNotUse;
     std::ifstream infile("secret.txt");
+    std::getline(infile, doNotUse); // skip first
     std::getline(infile, slackAppID);
     std::getline(infile, slackClientID);
     std::getline(infile, slackClientSecret);
