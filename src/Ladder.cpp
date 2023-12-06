@@ -18,16 +18,16 @@ Ladder::Ladder(std::string &dbPath) {
     // the name of the channel to post to
     std::string appToken;
     std::ifstream infile("secret.txt");
-    std::getline(infile, appToken); // skip first
+    std::getline(infile, appToken);
     std::getline(infile, slackAppID);
     std::getline(infile, slackClientID);
     std::getline(infile, slackClientSecret);
     std::getline(infile, slackChannelName);
     createSlackConnection(appToken);
-    beast::flat_buffer buffer;
-    ws.read(buffer);
-    std::cout << beast::make_printable(buffer.data()) << std::endl;
-    ws.close(websocket::close_code::normal);
+
+    //needed to post a message without interaction
+    slack = &slack::create(slackClientSecret);
+
 
     int rc = sqlite3_open(dbPath.c_str(), &db);
 
@@ -36,17 +36,266 @@ Ladder::Ladder(std::string &dbPath) {
         exit(1);
     }
     std::cout << "Opened the db successfully" << std::endl;
-    // TODO each time we update the ladder, need to also update the db
     createTables();
     loadLadder();
 
 
-
-//    auto& slack = slack::create(slackClientSecret);
-//    slack.chat.channel = slackChannelName;
-//
-//    slack.chat.postMessage("this is a test");
 }
+
+Ladder::~Ladder() {
+    ws.close(websocket::close_code::normal);
+    sqlite3_close(db);
+}
+
+void Ladder::run() {
+    beast::flat_buffer buffer;
+    while(true) {
+        // read call is blocking, so will only run when we get a new message from the socket
+        ws.read(buffer);
+        std::cout << beast::make_printable(buffer.data()) << std::endl;
+        ws.text(false);
+        const char* data = boost::asio::buffer_cast<const char*>(buffer.data());
+        std::size_t size = buffer.size();
+        std::string reqString(data, size);
+        auto request = json::parse(reqString);
+       // auto request = json::from_msgpack(buffers_begin(req), buffers_end(req));
+
+        if (request["type"] == "disconnect") {
+            // we want to refresh connection, so close socket and retry
+            std::cout << "Heard message with type `disconnect`, refreshing socket..." << std::endl;
+            break;
+
+        } else if (request["payload"]["type"] == "block_actions") {
+            std::stringstream ss;
+            std::string evID = request["envelope_id"];
+            json res = json::parse(R"(
+              {
+                "envelope_id": 3.141,
+
+                "payload": {}
+              }
+            )");
+            res["envelope_id"] = evID;
+            std::cout << "Heard block_command, sending ack... " << std::endl;
+
+
+            // check to see if submit button was pressed
+            if (request["payload"]["actions"][0]["action_id"] == "button-action") {
+                std::cout << "heard submit... " << std::endl;
+                handleMatchSubmit(request["payload"]["state"]);
+            }
+            std::cout << res.dump() << std::endl;
+            ws.text(true);
+            ws.write(net::buffer(res.dump()));
+
+        }
+        else if (request["type"] == "slash_commands") {
+            std::stringstream ss;
+            ss << *this;
+            std::string ladderString = ss.str();
+            std::string evID = request["envelope_id"];
+            json res = json::parse(R"(
+              {
+                "envelope_id": 3.141,
+
+                "payload": {}
+              }
+            )");
+            res["envelope_id"] = evID;
+            std::string toWrite;
+            if (request["payload"]["command"] == "/match") {
+                std::cout << "heard /match command" << std::endl;
+                res["payload"] = json::parse(R"({
+	"blocks": [
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Winner"
+			},
+			"accessory": {
+				"type": "users_select",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select a user",
+					"emoji": true
+				},
+				"action_id": "users_select-winner"
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Looser"
+			},
+			"accessory": {
+				"type": "users_select",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select a user",
+					"emoji": true
+				},
+				"action_id": "users_select-looser"
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Score:"
+			},
+			"accessory": {
+				"type": "radio_buttons",
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "3-0",
+							"emoji": true
+						},
+						"value": "0"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "3-1",
+							"emoji": true
+						},
+						"value": "1"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "3-2",
+							"emoji": true
+						},
+						"value": "2"
+					}
+				],
+				"action_id": "radio_buttons-action"
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Click 'Submit' to enter the challenge match score"
+			},
+			"accessory": {
+				"type": "button",
+				"text": {
+					"type": "plain_text",
+					"text": "Submit",
+					"emoji": true
+				},
+				"value": "true",
+				"action_id": "button-action"
+			}
+		}
+	]
+})");
+                toWrite = res.dump();
+            } else if (request["payload"]["command"] == "/ladder") {
+                res["payload"] = json::parse(R"({
+                    "response_type": "in_channel",
+                    "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "",
+                            "emoji": true
+                            }
+                    }
+                    ]
+            })");
+                res["payload"]["blocks"][0]["text"]["text"] = ladderString;
+                std::cout << ladderString << std::endl;
+                toWrite = res.dump();
+            }
+            std::cout << "Heard slash command, responding with " << toWrite << std::endl;
+            ws.text(true);
+            ws.write(net::buffer(toWrite));
+            std::cout << "responded" << std::endl;
+
+        }
+        buffer.consume(buffer.size()); // clears buffer
+    }
+    ws.close(websocket::close_code::normal);
+    createSlackConnection(appToken);
+    run();
+}
+
+
+void Ladder::handleMatchSubmit(json state) {
+    std::string winnerID;
+    std::string looserID;
+    int looserScore;
+    std::string toSend = "t";
+      if (state["values"].size() < 3) {
+          toSend = "Error: Please make sure to enter all fields before clicking 'Submit'";
+      }
+
+      for (auto& values : state["values"].items()) {
+          std::cout << values.value() << std::endl;
+          if (values.value().find("users_select-winner") != values.value().end()) {
+              winnerID = values.value()["users_select-winner"]["selected_user"].dump();
+          } else if (values.value().find("users_select-looser") != values.value().end()) {
+              looserID = values.value()["users_select-looser"]["selected_user"].dump();
+          }else if (values.value().find("radio_buttons-action") != values.value().end()) {
+              std::string score = values.value()["radio_buttons-action"]["selected_option"]["value"];
+              looserScore = std::stoi(score);
+          }
+      }
+
+     std::string userWinnerQuery =  "SELECT * FROM ladder WHERE slackID = " + winnerID + ";";
+     std::string userLooserQuery =  "SELECT * FROM ladder WHERE slackID = " + looserID + ";";
+     std::string winnerName;
+     std::string looserName;
+     sqlite3_stmt* stmt;
+
+    int rc = sqlite3_prepare_v2(db, userWinnerQuery.c_str(), -1, &stmt, nullptr);
+
+    if (rc == 0) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            winnerName = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        }
+        sqlite3_finalize(stmt);
+    } else {
+        std::cerr << "Failed to execute query: " << sqlite3_errmsg(db) << std::endl;
+    }
+    rc = sqlite3_prepare_v2(db, userLooserQuery.c_str(), -1, &stmt, nullptr);
+
+    if (rc == 0) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            looserName = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        }
+        sqlite3_finalize(stmt);
+    } else {
+        std::cerr << "Failed to execute query: " << sqlite3_errmsg(db) << std::endl;
+    }
+    std::time_t t = std::time(nullptr);
+
+    Match match(winnerName, 3, looserName, looserScore, *std::localtime(&t));
+    recordMatch(match);
+    winnerID = winnerID.substr(1, winnerID.size() - 2);
+    looserID = looserID.substr(1, looserID.size() - 2);
+    toSend = "<@" +winnerID + "> beat <@" + looserID + "> with a score of 3-" + std::to_string(looserScore);
+
+    slack->chat.channel = slackChannelName;
+
+    auto json = R"({
+    "text":         "x",
+    "channel":      "x"
+})"_json;
+    json["text"] = toSend;
+    json["channel"] = slackChannelName;
+    slack::post("chat.postMessage", json);
+}
+
+
+
 
 void Ladder::executeSQL(const char *sql) {
     char* errMsg = nullptr;
@@ -63,7 +312,8 @@ void Ladder::createTables() {
     const char* createLadderTableSQL = "CREATE TABLE IF NOT EXISTS ladder ("
                                        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                                        "name TEXT NOT NULL,"
-                                       "ranking INTEGER NOT NULL);";
+                                       "ranking INTEGER NOT NULL,"
+                                       "slackID TEXT NOT NULL);";
 
     const char* createMatchHistoryTableSQL = "CREATE TABLE IF NOT EXISTS match_history ("
                                              "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -89,7 +339,8 @@ void Ladder::loadLadder() {
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
             int ranking = sqlite3_column_int(stmt, 2);
-            ladder.emplace_back(name, ranking);
+            std::string slackID = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            ladder.emplace_back(name, ranking, slackID);
         }
 
         sqlite3_finalize(stmt);
@@ -105,9 +356,9 @@ void Ladder::saveMatchToDatabase(Match &match) {
     executeSQL(insertMatchSQL.c_str());
 }
 
-void Ladder::addPlayer(const std::string &name) {
-    ladder.emplace_back(name, ladder.size() + 1);
-    std::string insertMatchSQL = "INSERT INTO ladder (name, ranking) VALUES ('" + name + "', '" + std::to_string(ladder.size()+1) + "');";
+void Ladder::addPlayer(const std::string &name, const std::string &slackUser) {
+    ladder.emplace_back(name, ladder.size() + 1, slackUser);
+    std::string insertMatchSQL = "INSERT INTO ladder (name, ranking, slackID) VALUES ('" + name + "', '" + std::to_string(ladder.size()+1) + "', '" + slackUser + "');";
     executeSQL(insertMatchSQL.c_str());
 }
 
@@ -191,6 +442,11 @@ void Ladder::createSlackConnection(std::string appToken) {
 
         // Perform the websocket handshake
         ws.handshake(host, text);
+        beast::flat_buffer buffer;
+        ws.read(buffer); // this is hello message from slack
+        //TODO if this is not a hello message, try connection again
+        std::cout << beast::make_printable(buffer.data()) << std::endl;
+        buffer.consume(buffer.size()); // clears buffer
     }
     catch(std::exception const & e) {
         std::cerr << "Error: " << e.what() << std::endl;

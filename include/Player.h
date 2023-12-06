@@ -14,9 +14,10 @@ class Player {
 private:
     int  ranking;
     std::string name;
+    std::string slackID;
 
 public:
-    Player(std::string playerName, int ladderRanking);
+    Player(std::string playerName, int ladderRanking, std::string slackUser);
 
     /**
      * Sets the rank of this player to the passed value

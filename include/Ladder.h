@@ -14,8 +14,10 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/stream.hpp>
+#include <boost/asio/buffers_iterator.hpp>
 #include "json.hpp"
 #include <curl/curl.h>
+#include "slacking.hpp"
 
 
 namespace beast = boost::beast;         // from <boost/beast.hpp>
@@ -36,10 +38,12 @@ private:
     std::vector<Player> ladder; // sorted vector containing players to represent the ladder
     std::vector<Match> matchHistory; // a vector containing all match history.
     sqlite3 *db{};
+    std::string appToken;
     std::string slackAppID;
     std::string slackClientID;
     std::string slackClientSecret;
     std::string slackChannelName;
+    slack::Slacking *slack;
     // The io_context is required for all I/O
     net::io_context ioc;
 
@@ -53,6 +57,8 @@ private:
 
 public:
     Ladder(std::string &dbPath);
+
+    ~Ladder();
 
     /**
      * Executes the passed sql statement on the db
@@ -81,11 +87,12 @@ public:
      */
     void loadLadder();
 
+    void handleMatchSubmit(json state);
     /**
      * Adds a player to the ladder, at the back of the ladder
      * @param name
      */
-    void addPlayer(const std::string &name);
+    void addPlayer(const std::string &name, const std::string &slackUsername);
 
     /**
      * Updates the passed players rank. Also updates any other player's rank that might need to shift
@@ -109,6 +116,11 @@ public:
     void createSlackConnection(std::string basicString);
 
     static std::string performSocketCurlCheck(const std::string& token);
+
+    /**
+     * Event loop for service
+     */
+    void run();
 
     // TODO maybe need a updateLadder()
 

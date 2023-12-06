@@ -7,9 +7,10 @@
 
 #include "../include/Player.h"
 
-Player::Player(std::string playerName, int ladderRanking) {
+Player::Player(std::string playerName, int ladderRanking, std::string slackUser) {
     ranking = ladderRanking;
     name = std::move(playerName); //avoids copying multiple times
+    slackID = std::move(slackUser);
 }
 
 void Player::setRanking(int newRank) {
