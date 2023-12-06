@@ -9,6 +9,26 @@
 
 
 Ladder::Ladder(std::string &dbPath) {
+    // set up slack connection.
+    // expects a file called secret.txt containing the following (in order, each token on a new line)
+    // slack xapp-1 token for socket connection
+    // slack app id
+    // slack client id
+    // slack bot user oAuth token
+    // the name of the channel to post to
+    std::string appToken;
+    std::ifstream infile("secret.txt");
+    std::getline(infile, appToken); // skip first
+    std::getline(infile, slackAppID);
+    std::getline(infile, slackClientID);
+    std::getline(infile, slackClientSecret);
+    std::getline(infile, slackChannelName);
+    createSlackConnection(appToken);
+
+    beast::flat_buffer buffer;
+    wss->read(buffer);
+    std::cout << beast::make_printable(buffer.data()) << std::endl;
+    wss->close(websocket::close_code::normal);
 
     int rc = sqlite3_open(dbPath.c_str(), &db);
 
@@ -18,29 +38,15 @@ Ladder::Ladder(std::string &dbPath) {
     }
     std::cout << "Opened the db successfully" << std::endl;
     // TODO each time we update the ladder, need to also update the db
-
     createTables();
     loadLadder();
 
-    // set up slack connection.
-    // expects a file called secret.txt containing the following (in order, each token on a new line)
-    // slack xapp-1 token for socket connection
-    // slack app id
-    // slack client id
-    // slack bot user oAuth token
-    // the name of the channel to post to
-    std::string doNotUse;
-    std::ifstream infile("secret.txt");
-    std::getline(infile, doNotUse); // skip first
-    std::getline(infile, slackAppID);
-    std::getline(infile, slackClientID);
-    std::getline(infile, slackClientSecret);
-    std::getline(infile, slackChannelName);
 
-    auto& slack = slack::create(slackClientSecret);
-    slack.chat.channel = slackChannelName;
 
-    slack.chat.postMessage("this is a test");
+//    auto& slack = slack::create(slackClientSecret);
+//    slack.chat.channel = slackChannelName;
+//
+//    slack.chat.postMessage("this is a test");
 }
 
 void Ladder::executeSQL(const char *sql) {
@@ -146,4 +152,114 @@ void Ladder::printMatches() {
     for (const Match& match : matchHistory) {
         std::cout << match;
     }
+}
+
+void Ladder::createSlackConnection(std::string appToken) {
+    const std::string endOfURI = performSocketCurlCheck(appToken);
+    std::string host = "wss-primary.slack.com";
+    const char *port = "443";
+    const char *text = endOfURI.c_str();
+    try {
+        // The io_context is required for all I/O
+        net::io_context ioc;
+
+        // The SSL context is required, and holds certificates
+        ssl::context ctx{ssl::context::tlsv12_client};
+
+        // These objects perform our I/O
+        tcp::resolver resolver{ioc};
+
+       websocket::stream<beast::ssl_stream<tcp::socket>> ws{ioc, ctx};
+
+        // Look up the domain name
+        auto const results = resolver.resolve(host, port);
+
+        // Make the connection on the IP address we get from a lookup
+        auto ep = net::connect(get_lowest_layer(ws), results);
+
+        // Set SNI Hostname (many hosts need this to handshake successfully)
+        if (!SSL_set_tlsext_host_name(ws.next_layer().native_handle(), host.c_str()))
+            throw beast::system_error(
+                    beast::error_code(
+                            static_cast<int>(::ERR_get_error()),
+                            net::error::get_ssl_category()),
+                    "Failed to set SNI Hostname");
+
+        // Update the host_ string. This will provide the value of the
+        // Host HTTP header during the WebSocket handshake.
+        // See https://tools.ietf.org/html/rfc7230#section-5.4
+        host += ':' + std::to_string(ep.port());
+
+        // Perform the SSL handshake
+        ws.next_layer().handshake(ssl::stream_base::client);
+
+        // Set a decorator to change the User-Agent of the handshake
+        ws.set_option(websocket::stream_base::decorator(
+                [](websocket::request_type &req) {
+                    req.set(http::field::user_agent,
+                            std::string(BOOST_BEAST_VERSION_STRING) +
+                            " websocket-client-coro");
+                }));
+
+        // Perform the websocket handshake
+        ws.handshake(host, text);
+        wss = &ws;
+    }
+    catch(std::exception const & e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        exit(1);
+    }
+}
+
+size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *output) {
+    size_t total_size = size * nmemb;
+    output->append((char *) contents, total_size);
+    return total_size;
+}
+
+std::string Ladder::performSocketCurlCheck(const std::string& token) {
+    CURL *curl;
+    CURLcode res;
+
+    // Initialize cURL
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+    std::string response;
+
+    // Set the URL for the POST request
+    curl_easy_setopt(curl, CURLOPT_URL, "https://slack.com/api/apps.connections.open");
+
+    // Set the POST data
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
+
+    // Set the custom headers
+    struct curl_slist *headers = nullptr;
+    std::string tokenHeader = "Authorization: Bearer " + token;
+    headers = curl_slist_append(headers, "Content-type: application/x-www-form-urlencoded");
+    headers = curl_slist_append(headers, tokenHeader.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    // Set the callback function to handle the response
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+    // Perform the POST request
+    res = curl_easy_perform(curl);
+
+    // Check for errors
+    if (res != CURLE_OK) {
+        fprintf(stderr, "slack socket url request failed: %s\n", curl_easy_strerror(res));
+        exit(1);
+    }
+
+    // Clean up
+    curl_easy_cleanup(curl);
+    curl_global_cleanup();
+
+    json parsedResponse = json::parse(response);
+    std::string parsedHost = parsedResponse["url"];
+
+    size_t lastSlashPos = parsedHost.find_last_of('/');
+    std::string endOfURI = "/link" + parsedHost.substr(lastSlashPos);
+    return endOfURI;
 }

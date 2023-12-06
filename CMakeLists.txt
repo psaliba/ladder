@@ -20,13 +20,6 @@ find_package(Boost REQUIRED)
 
 include_directories(${Boost_INCLUDE_DIRS})
 
-if(Boost_FOUND)
-    message(STATUS found boost)
-    include_directories(${Boost_INCLUDE_DIRS})
-    add_executable(beast_demo main.cpp)
-    target_link_libraries(beast_demo ${Boost_LIBRARIES})
-
-endif()
 
 add_executable(ladder main.cpp
         include/Player.h
