@@ -24,11 +24,10 @@ Ladder::Ladder(std::string &dbPath) {
     std::getline(infile, slackClientSecret);
     std::getline(infile, slackChannelName);
     createSlackConnection(appToken);
-
     beast::flat_buffer buffer;
-    wss->read(buffer);
+    ws.read(buffer);
     std::cout << beast::make_printable(buffer.data()) << std::endl;
-    wss->close(websocket::close_code::normal);
+    ws.close(websocket::close_code::normal);
 
     int rc = sqlite3_open(dbPath.c_str(), &db);
 
@@ -160,17 +159,6 @@ void Ladder::createSlackConnection(std::string appToken) {
     const char *port = "443";
     const char *text = endOfURI.c_str();
     try {
-        // The io_context is required for all I/O
-        net::io_context ioc;
-
-        // The SSL context is required, and holds certificates
-        ssl::context ctx{ssl::context::tlsv12_client};
-
-        // These objects perform our I/O
-        tcp::resolver resolver{ioc};
-
-       websocket::stream<beast::ssl_stream<tcp::socket>> ws{ioc, ctx};
-
         // Look up the domain name
         auto const results = resolver.resolve(host, port);
 
@@ -203,7 +191,6 @@ void Ladder::createSlackConnection(std::string appToken) {
 
         // Perform the websocket handshake
         ws.handshake(host, text);
-        wss = &ws;
     }
     catch(std::exception const & e) {
         std::cerr << "Error: " << e.what() << std::endl;

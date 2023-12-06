@@ -40,7 +40,16 @@ private:
     std::string slackClientID;
     std::string slackClientSecret;
     std::string slackChannelName;
-    websocket::stream<beast::ssl_stream<tcp::socket>> *wss;
+    // The io_context is required for all I/O
+    net::io_context ioc;
+
+    // The SSL context is required, and holds certificates
+    ssl::context ctx{ssl::context::tlsv12_client};
+
+    // These objects perform our I/O
+    tcp::resolver resolver{ioc};
+
+    websocket::stream<beast::ssl_stream<tcp::socket>> ws{ioc, ctx};
 
 public:
     Ladder(std::string &dbPath);
