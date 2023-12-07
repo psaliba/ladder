@@ -87,6 +87,23 @@ public:
      */
     void loadLadder();
 
+    /**
+     * Handles a socket response from an interactable message.If the submit button is pressed, will update the ladder
+     * with the passed match
+     * @param response the json object that is sent by slack
+     */
+    void handleBlockAction(json response);
+
+    /**
+     * Handles slash commands from slack. Supports /match and /ladder.
+     * @param response the json object that is sent by slack
+     */
+    void handleSlashCommand(json request);
+
+    /**
+     * Handles when a user submits a match after using /match. Updates the ladder and stores the match in the db
+     * @param state the entered data in the /match message
+     */
     void handleMatchSubmit(json state);
     /**
      * Adds a player to the ladder, at the back of the ladder
@@ -113,16 +130,22 @@ public:
      */
     void printMatches();
 
-    void createSlackConnection(const std::string& basicString);
-
-    static std::string performSocketCurlCheck(const std::string& token);
+    /**
+     * Creates a websocket connection to slack, over tls
+     */
+    void createSlackConnection();
 
     /**
-     * Event loop for service
+     * Queries slack for the current websocket endpoint. This can refresh, so if a refresh connection message
+     * is sent by slack, this is called again to get the new endpoint
+     * @return the URI to hit (does not include the host)
+     */
+    static std::string performSocketCurlCheck();
+
+    /**
+     * Event loop for the service
      */
     void run();
-
-    // TODO maybe need a updateLadder()
 
     friend std::ostream &operator<<(std::ostream &os, const Ladder &thisLadder) {
         os << "Ladder: " << std::endl;

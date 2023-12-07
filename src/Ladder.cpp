@@ -10,27 +10,18 @@
 
 Ladder::Ladder(std::string &dbPath) {
     // set up slack connection.
-    // expects a file called secret.txt containing the following (in order, each token on a new line)
-    // slack xapp-1 token for socket connection
-    // slack app id
-    // slack client id
-    // slack bot user oAuth token
-    // the name of the channel to post to
-    std::string appToken;
     std::ifstream infile("secret.txt");
     std::getline(infile, appToken);
     std::getline(infile, slackAppID);
     std::getline(infile, slackClientID);
     std::getline(infile, slackClientSecret);
     std::getline(infile, slackChannelName);
-    createSlackConnection(appToken);
+    createSlackConnection();
 
     //needed to post a message without interaction
     slack = &slack::create(slackClientSecret);
 
-
     int rc = sqlite3_open(dbPath.c_str(), &db);
-
     if (rc != 0) {
         std::cerr << "Couldn't open the db " << sqlite3_errmsg(db) << std::endl;
         exit(1);
@@ -38,15 +29,13 @@ Ladder::Ladder(std::string &dbPath) {
     std::cout << "Opened the db successfully" << std::endl;
     createTables();
     loadLadder();
-
-
 }
 
 Ladder::~Ladder() {
     ws.close(websocket::close_code::normal);
     sqlite3_close(db);
 }
-//todo abstract me
+
 void Ladder::run() {
     beast::flat_buffer buffer;
     while (true) {
@@ -63,45 +52,56 @@ void Ladder::run() {
             // we want to refresh connection, so close socket and retry
             std::cout << "Heard message with type `disconnect`, refreshing socket..." << std::endl;
             break;
-
         } else if (request["payload"]["type"] == "block_actions") {
-            std::stringstream ss;
-            std::string evID = request["envelope_id"];
-            json res = json::parse(R"(
-              {
-                "envelope_id": 3.141,
-                "payload": {}
-              }
-            )");
-            res["envelope_id"] = evID;
-            std::cout << "Heard block_command, sending ack... " << std::endl;
-
-            // check to see if submit button was pressed
-            if (request["payload"]["actions"][0]["action_id"] == "button-action") {
-                std::cout << "heard submit... " << std::endl;
-                handleMatchSubmit(request["payload"]["state"]);
-            }
-            std::cout << res.dump() << std::endl;
-            ws.text(true);
-            ws.write(net::buffer(res.dump()));
-
+            handleBlockAction(request);
         } else if (request["type"] == "slash_commands") {
-            std::stringstream ss;
-            ss << *this;
-            std::string ladderString = ss.str();
-            std::string evID = request["envelope_id"];
-            json res = json::parse(R"(
+            handleSlashCommand(request);
+        }
+        buffer.consume(buffer.size()); // clears buffer
+    }
+    ws.close(websocket::close_code::normal);
+    createSlackConnection();
+    run();
+}
+
+void Ladder::handleBlockAction(json request) {
+    std::stringstream ss;
+    std::string evID = request["envelope_id"];
+    json res = json::parse(R"(
               {
                 "envelope_id": 3.141,
-
                 "payload": {}
               }
             )");
-            res["envelope_id"] = evID;
-            std::string toWrite;
-            if (request["payload"]["command"] == "/match") {
-                std::cout << "heard /match command" << std::endl;
-                res["payload"] = json::parse(R"({
+    res["envelope_id"] = evID;
+
+    // check to see if submit button was pressed
+    if (request["payload"]["actions"][0]["action_id"] == "button-action") {
+        std::cout << "heard submit... " << std::endl;
+        slackChannelName = request["payload"]["channel"]["id"];
+        handleMatchSubmit(request["payload"]["state"]);
+    }
+    std::cout << res.dump() << std::endl;
+    ws.text(true);
+    ws.write(net::buffer(res.dump()));
+}
+
+void Ladder::handleSlashCommand(json request) {
+    std::stringstream ss;
+    ss << *this;
+    std::string ladderString = ss.str();
+    std::string evID = request["envelope_id"];
+    json res = json::parse(R"(
+              {
+                "envelope_id": "to be replaced,
+                "payload": {}
+              }
+            )");
+    res["envelope_id"] = evID;
+    std::string toWrite;
+    if (request["payload"]["command"] == "/match") {
+        std::cout << "heard /match command" << std::endl;
+        res["payload"] = json::parse(R"({
 	"blocks": [
 		{
 			"type": "section",
@@ -191,9 +191,9 @@ void Ladder::run() {
 		}
 	]
 })");
-                toWrite = res.dump();
-            } else if (request["payload"]["command"] == "/ladder") {
-                res["payload"] = json::parse(R"({
+        toWrite = res.dump();
+    } else if (request["payload"]["command"] == "/ladder") {
+        res["payload"] = json::parse(R"({
                     "response_type": "in_channel",
                     "blocks": [
                     {
@@ -206,23 +206,14 @@ void Ladder::run() {
                     }
                     ]
             })");
-                res["payload"]["blocks"][0]["text"]["text"] = ladderString;
-                std::cout << ladderString << std::endl;
-                toWrite = res.dump();
-            }
-            std::cout << "Heard slash command, responding with " << toWrite << std::endl;
-            ws.text(true);
-            ws.write(net::buffer(toWrite));
-            std::cout << "responded" << std::endl;
-
-        }
-        buffer.consume(buffer.size()); // clears buffer
+        res["payload"]["blocks"][0]["text"]["text"] = ladderString;
+        std::cout << ladderString << std::endl;
+        toWrite = res.dump();
     }
-    ws.close(websocket::close_code::normal);
-    createSlackConnection(appToken);
-    run();
+    std::cout << "Heard slash command, responding with " << toWrite << std::endl;
+    ws.text(true);
+    ws.write(net::buffer(toWrite));
 }
-
 
 void Ladder::handleMatchSubmit(json state) {
     std::string winnerID;
@@ -403,8 +394,8 @@ void Ladder::printMatches() {
     }
 }
 
-void Ladder::createSlackConnection(const std::string& appToken) {
-    const std::string endOfURI = performSocketCurlCheck(appToken);
+void Ladder::createSlackConnection() {
+    const std::string endOfURI = performSocketCurlCheck();
     std::string host = "wss-primary.slack.com";
     const char *port = "443";
     const char *text = endOfURI.c_str();
@@ -459,7 +450,7 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *out
     return total_size;
 }
 
-std::string Ladder::performSocketCurlCheck(const std::string &token) {
+std::string Ladder::performSocketCurlCheck() {
     CURL *curl;
     CURLcode res;
 
@@ -476,7 +467,7 @@ std::string Ladder::performSocketCurlCheck(const std::string &token) {
 
     // Set the custom headers
     struct curl_slist *headers = nullptr;
-    std::string tokenHeader = "Authorization: Bearer " + token;
+    std::string tokenHeader = "Authorization: Bearer " + appToken;
     headers = curl_slist_append(headers, "Content-type: application/x-www-form-urlencoded");
     headers = curl_slist_append(headers, tokenHeader.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
