@@ -140,7 +140,7 @@ public:
      * is sent by slack, this is called again to get the new endpoint
      * @return the URI to hit (does not include the host)
      */
-    static std::string performSocketCurlCheck();
+    static std::string performSocketCurlCheck(const std::string &token);
 
     /**
      * Event loop for the service

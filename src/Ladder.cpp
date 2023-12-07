@@ -93,7 +93,7 @@ void Ladder::handleSlashCommand(json request) {
     std::string evID = request["envelope_id"];
     json res = json::parse(R"(
               {
-                "envelope_id": "to be replaced,
+                "envelope_id": "to be replaced",
                 "payload": {}
               }
             )");
@@ -395,7 +395,7 @@ void Ladder::printMatches() {
 }
 
 void Ladder::createSlackConnection() {
-    const std::string endOfURI = performSocketCurlCheck();
+    const std::string endOfURI = performSocketCurlCheck(appToken);
     std::string host = "wss-primary.slack.com";
     const char *port = "443";
     const char *text = endOfURI.c_str();
@@ -450,7 +450,7 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *out
     return total_size;
 }
 
-std::string Ladder::performSocketCurlCheck() {
+std::string Ladder::performSocketCurlCheck(const std::string &token) {
     CURL *curl;
     CURLcode res;
 
@@ -467,7 +467,7 @@ std::string Ladder::performSocketCurlCheck() {
 
     // Set the custom headers
     struct curl_slist *headers = nullptr;
-    std::string tokenHeader = "Authorization: Bearer " + appToken;
+    std::string tokenHeader = "Authorization: Bearer " + token;
     headers = curl_slist_append(headers, "Content-type: application/x-www-form-urlencoded");
     headers = curl_slist_append(headers, tokenHeader.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
