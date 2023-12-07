@@ -113,7 +113,7 @@ public:
      */
     void printMatches();
 
-    void createSlackConnection(std::string basicString);
+    void createSlackConnection(const std::string& basicString);
 
     static std::string performSocketCurlCheck(const std::string& token);
 
