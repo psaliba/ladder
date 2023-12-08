@@ -51,6 +51,7 @@ void Ladder::run() {
         if (request["type"] == "disconnect") {
             // we want to refresh connection, so close socket and retry
             std::cout << "Heard message with type `disconnect`, refreshing socket..." << std::endl;
+            buffer.consume(buffer.size()); // clears buffer
             break;
         } else if (request["payload"]["type"] == "block_actions") {
             handleBlockAction(request);
@@ -59,9 +60,6 @@ void Ladder::run() {
         }
         buffer.consume(buffer.size()); // clears buffer
     }
-    ws.close(websocket::close_code::normal);
-    createSlackConnection();
-    run();
 }
 
 void Ladder::handleBlockAction(json request) {

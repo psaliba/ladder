@@ -9,7 +9,7 @@
 int main() {
 
     std::string dbName = "squash_ladder.db";
-    Ladder squashLadder = Ladder(dbName);
+    //Ladder squashLadder = Ladder(dbName);
 //    squashLadder.addPlayer("Eli Paul", "U02F0JHJD6J");
 //    squashLadder.addPlayer("Jacob Domber", "U02FLCCFT8V");
 //    squashLadder.addPlayer("Ryan Lake", "U02FDU3U79V");
@@ -25,5 +25,8 @@ int main() {
 //    squashLadder.addPlayer("Charles Egan", "U05U8MVCYEM");
 //    squashLadder.updateLadder();
 
-    squashLadder.run();
+    while (true) {
+        Ladder squashLadder = Ladder(dbName);
+        squashLadder.run();
+    }
 }
